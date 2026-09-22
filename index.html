@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>เกม AR จับเคลื่อนไหวมือ เรื่อง แม่สี</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font: Kanit -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- MediaPipe Hands & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        .bg-pattern {
+            background-color: #f0fdf4;
+            background-image: radial-gradient(#cbd5e1 2px, transparent 2px), radial-gradient(#cbd5e1 2px, #f0fdf4 2px);
+            background-size: 50px 50px;
+            background-position: 0 0, 25px 25px;
+        }
+        .hand-pointer {
+            pointer-events: none;
+            transition: transform 0.05s ease-out;
+            z-index: 9999;
+        }
+        .cursor-pinch {
+            transform: scale(0.85) rotate(-15deg) !important;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.9; }
+            50% { transform: scale(1.25); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.9; }
+        }
+        .animate-pulse-ring {
+            animation: pulse-ring 1.4s infinite ease-in-out;
+        }
+        .bounce-gentle {
+            animation: bounceGentle 2s infinite ease-in-out;
+        }
+        @keyframes bounceGentle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .dragging-active {
+            position: fixed !important;
+            z-index: 9000 !important;
+            pointer-events: none !important;
+            transform: translate(-50%, -50%) scale(1.15) !important;
+            box-shadow: 0 25px 30px -5px rgba(0, 0, 0, 0.3) !important;
+            transition: none !important;
+        }
+        .drop-target-hover {
+            transform: scale(1.08) !important;
+            border-style: solid !important;
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.8) !important;
+        }
+
+        /* Special Education Friendly 3D Toy Cards */
+        .special-toy-card {
+            position: relative;
+            background: #ffffff;
+            border: 6px solid #cbd5e1;
+            border-bottom-width: 10px;
+            border-bottom-color: #94a3b8;
+            border-radius: 2.2rem;
+            box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.12);
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            overflow: hidden;
+        }
+        .special-toy-card::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 8px;
+            right: 8px;
+            height: 12%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%);
+            border-radius: 1.5rem 1.5rem 50% 50%;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .special-toy-card:hover, .special-toy-card-hover {
+            transform: translateY(-6px) scale(1.04);
+            border-color: #f59e0b;
+            border-bottom-color: #d97706;
+            box-shadow: 0 20px 30px -8px rgba(245, 158, 11, 0.35);
+        }
+        .special-toy-card:active {
+            transform: translateY(3px) scale(0.97);
+            border-bottom-width: 6px;
+            box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.15);
+        }
+        .card-correct {
+            border-color: #10b981 !important;
+            border-bottom-color: #047857 !important;
+            background-color: #ecfdf5 !important;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.5) !important;
+        }
+        .card-wrong {
+            border-color: #f43f5e !important;
+            border-bottom-color: #be123c !important;
+            background-color: #fff1f2 !important;
+            box-shadow: 0 0 20px rgba(244, 63, 94, 0.4) !important;
+            animation: shake 0.4s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+    </style>
+</head>
+<body class="bg-pattern min-h-screen text-slate-800 flex flex-col justify-between overflow-x-hidden selection:bg-amber-300">
+
+    <header class="w-full bg-white/95 backdrop-blur-md border-b-8 border-amber-400 shadow-lg sticky top-0 z-30 px-3 py-3 md:px-8">
+        <div class="max-w-6xl mx-auto flex items-center justify-between gap-3">
+            
+            <!-- Logo & Title -->
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-tr from-rose-500 via-amber-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg text-white text-2xl md:text-3xl font-black border-4 border-white">
+                    🎨
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-2xl font-black text-slate-800 leading-tight tracking-wide">เกม AR แม่สีการ์ตูนสุดสนุก</h1>
+                    <p class="text-xs md:text-sm text-slate-500 font-bold hidden sm:block">เรียนรู้ 3 แม่สี แดง 🔴 เหลือง 🟡 น้ำเงิน 🔵</p>
+                </div>
+            </div>
+
+            <!-- Level & Score Counters -->
+            <div class="flex items-center gap-2 md:gap-4">
+                <div class="bg-amber-100 border-4 border-amber-400 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-flag-checkered text-amber-600 text-base md:text-xl"></i>
+                    <span class="text-xs md:text-base font-extrabold text-amber-900">ด่าน <span id="ui-current-level" class="text-lg md:text-2xl font-black text-amber-600">1</span>/10</span>
+                </div>
+
+                <div class="bg-emerald-100 border-4 border-emerald-400 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-star text-amber-500 text-base md:text-xl animate-bounce"></i>
+                    <span class="text-xs md:text-base font-extrabold text-emerald-900">คะแนน <span id="ui-total-score" class="text-lg md:text-2xl font-black text-emerald-600">0</span>/100</span>
+                </div>
+
+                <!-- Audio Toggle Button -->
+                <button id="audio-toggle-btn" class="w-10 h-10 md:w-12 md:h-12 bg-slate-100 hover:bg-slate-200 border-4 border-slate-300 rounded-2xl flex items-center justify-center text-slate-700 font-bold shadow-sm active:scale-95 transition cursor-pointer">
+                    <i id="audio-icon" class="fa-solid fa-volume-high text-base md:text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-5xl w-full mx-auto p-3 md:p-6 pb-6 md:pb-8 flex flex-col justify-center items-center relative z-10">
+
+        <!-- Floating Score Toast Notification -->
+        <div id="score-toast" class="fixed top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 scale-75">
+            <div id="score-toast-bg" class="bg-emerald-500 text-white font-black text-xl md:text-3xl px-8 py-3.5 rounded-full shadow-2xl flex items-center gap-3 border-4 border-white">
+                <i id="score-toast-icon" class="fa-solid fa-circle-check text-2xl"></i>
+                <span id="score-toast-text">+10 คะแนน!</span>
+            </div>
+        </div>
+
+        <!-- Dynamic Game Card Wrapper -->
+        <div id="game-card" class="w-full bg-white border-8 border-slate-200 rounded-3xl shadow-2xl p-4 md:p-8 flex flex-col items-center justify-between min-h-[500px] md:min-h-[560px] relative overflow-hidden transition-all">
+            
+            <!-- Level Header / Instruction Title -->
+            <div class="w-full text-center mb-3">
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-3">
+                    <span id="level-badge" class="inline-block bg-gradient-to-r from-amber-400 via-rose-500 to-indigo-500 text-white font-black text-2xl md:text-4xl px-8 py-2.5 rounded-3xl border-4 border-amber-300 shadow-xl tracking-wider transform hover:scale-105 transition-all">
+                        ด่านที่ 1
+                    </span>
+                    <span id="attempts-badge" class="inline-block bg-rose-100 text-rose-800 font-extrabold text-xs md:text-sm px-4 py-1.5 rounded-full border-2 border-rose-300">
+                        ❌ ตอบผิดได้อีก 2 ครั้ง
+                    </span>
+                </div>
+                <h2 id="level-title" class="text-2xl md:text-4xl font-black text-slate-800 tracking-wide mt-1">
+                    กำลังโหลดเกม...
+                </h2>
+                <p id="level-subtitle" class="text-sm md:text-lg text-slate-600 font-bold mt-1">
+                    คำแนะนำด่านจะแสดงตรงนี้
+                </p>
+            </div>
+
+            <!-- Dynamic Interactive Area -->
+            <div id="play-arena" class="w-full flex-1 flex flex-col items-center justify-center my-2 relative z-10">
+                <!-- Content injected via JavaScript dynamically -->
+            </div>
+
+            <!-- Bottom Navigation Bar -->
+            <div class="w-full pt-4 mt-2 border-t-4 border-slate-100 flex items-center justify-center gap-2 relative">
+                <div id="nav-hint-badge" class="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-300 text-amber-900 border-2 border-amber-500 text-[10px] md:text-xs font-black px-3 py-0.5 rounded-full shadow-sm z-20 pointer-events-none">
+                    ✌️ โหมด AR: จีบนิ้วโป้งแตะนิ้วชี้ 2 ครั้งติดกันที่ปุ่มเริ่มใหม่เพื่อสั่งการ
+                </div>
+
+                <button id="btn-restart-game" class="relative bg-rose-500 hover:bg-rose-600 text-white font-extrabold px-8 py-3 rounded-2xl text-sm md:text-lg flex items-center gap-2.5 shadow-lg active:scale-95 transition cursor-pointer border-4 border-rose-300">
+                    <i class="fa-solid fa-rotate-right text-lg md:text-xl"></i>
+                    <span>เริ่มต้นใหม่</span>
+                    <span id="badge-btn-restart-game" class="hidden absolute -top-2 -right-2 bg-amber-400 text-slate-900 font-black text-xs w-7 h-7 rounded-full flex items-center justify-center border-2 border-white shadow-md animate-bounce">1/2</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Welcome Modal -->
+    <div id="welcome-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-white border-8 border-amber-400 rounded-3xl max-w-lg w-full p-6 md:p-8 text-center shadow-2xl relative overflow-hidden animate-bounce-gentle">
+            <div class="w-24 h-24 mx-auto bg-gradient-to-tr from-rose-500 via-amber-400 to-blue-500 rounded-3xl flex items-center justify-center shadow-lg text-white text-5xl mb-4 border-4 border-white">
+                ✨
+            </div>
+            
+            <h2 class="text-2xl md:text-4xl font-black text-slate-800 mb-2">ตะลุยดินแดนแม่สีการ์ตูน!</h2>
+            <p class="text-slate-600 font-bold text-base md:text-lg mb-6 leading-relaxed">
+                สนุกสนานกับภาพการ์ตูนน่ารัก <br>
+                เรียนรู้เรื่อง <span class="text-rose-500 font-black">สีแดง</span>, <span class="text-amber-500 font-black">สีเหลือง</span> และ <span class="text-blue-500 font-black">สีน้ำเงิน</span> ครบทั้ง 10 ด่าน!
+            </p>
+
+            <div class="space-y-3">
+                <button id="btn-start-camera" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-lg md:text-xl py-4 px-6 rounded-2xl shadow-xl border-4 border-emerald-300 flex items-center justify-center gap-3 active:scale-95 transition cursor-pointer">
+                    <i class="fa-solid fa-hand-pointer text-2xl"></i>
+                    <span>เริ่มเล่นเปิดกล้องจับเคลื่อนไหวมือ (AR)</span>
+                </button>
+
+                <button id="btn-start-touch" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-lg md:text-xl py-4 px-6 rounded-2xl shadow-md border-4 border-amber-200 flex items-center justify-center gap-3 active:scale-95 transition cursor-pointer">
+                    <i class="fa-solid fa-hand-pointer text-2xl"></i>
+                    <span>เล่นด้วยสัมผัส / เมาส์</span>
+                </button>
+            </div>
+
+            <p class="text-xs md:text-sm text-slate-400 font-bold mt-4">
+                <i class="fa-solid fa-circle-info mr-1"></i> ตอบผิดได้สูงสุด 2 ครั้งต่อด่าน แล้วจะเปลี่ยนด่านให้อัตโนมัติ!
+            </p>
+        </div>
+    </div>
+
+    <!-- Camera Error Modal -->
+    <div id="cam-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white border-8 border-rose-400 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl">
+            <div class="w-16 h-16 mx-auto bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center text-3xl mb-3">
+                <i class="fa-solid fa-video-slash"></i>
+            </div>
+            <h3 class="text-xl font-black text-slate-800 mb-2" id="cam-modal-title">ไม่สามารถเปิดกล้องได้</h3>
+            <p class="text-slate-600 font-bold text-sm mb-4 leading-relaxed" id="cam-modal-desc">
+                กรุณากดอนุญาตสิทธิ์ใช้งานกล้องในเบราว์เซอร์ หรือเลือกเล่นด้วยสัมผัส/เมาส์แทนได้ทันทีครับ
+            </p>
+            <div class="flex gap-2">
+                <button id="btn-retry-camera" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 px-4 rounded-xl text-sm cursor-pointer border-2 border-indigo-400">
+                    ลองเปิดกล้องอีกครั้ง
+                </button>
+                <button id="btn-close-cam-modal" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold py-3 px-4 rounded-xl text-sm cursor-pointer border-2 border-slate-300">
+                    เล่นด้วยเมาส์แทน
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Victory Photo Modal -->
+    <div id="victory-modal" class="fixed inset-0 bg-slate-900/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white border-8 border-amber-400 rounded-3xl max-w-2xl w-full p-6 md:p-8 text-center shadow-2xl relative overflow-hidden animate-bounce-gentle">
+            
+            <div class="text-5xl md:text-6xl mb-2">🏆</div>
+            <h2 id="victory-title-text" class="text-2xl md:text-4xl font-black text-slate-800 mb-1">ยินดีด้วย! คุณคือปรมาจารย์แม่สี</h2>
+            <p id="victory-desc-text" class="text-slate-600 font-bold text-sm md:text-base mb-3">ผ่านครบ 10 ด่าน ได้รับคะแนน!</p>
+
+            <div class="bg-amber-100 border-4 border-amber-400 rounded-2xl py-2 px-6 inline-block mb-4">
+                <span class="text-lg md:text-2xl font-black text-amber-900">คะแนนรวมจริง: <span id="victory-final-score" class="text-3xl md:text-4xl text-emerald-600 font-black">0</span> / 100 คะแนน 🌟</span>
+            </div>
+
+            <!-- Live Camera Feed Photo Box -->
+            <div class="relative w-full h-60 md:h-72 bg-slate-900 rounded-2xl overflow-hidden border-4 border-emerald-400 shadow-lg mb-4 flex items-center justify-center">
+                <video id="victory-video" class="w-full h-full object-cover -scale-x-100" playsinline webkit-playsinline muted></video>
+                <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full font-bold border border-white/30">
+                    📸 ยิ้มหวานๆ แล้วถ่ายรูปคู่กับคะแนนได้เลย!
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <button id="btn-capture-photo" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black text-lg py-3.5 px-6 rounded-2xl shadow-xl border-4 border-emerald-300 flex items-center justify-center gap-2 active:scale-95 transition cursor-pointer">
+                    <i class="fa-solid fa-camera text-2xl"></i>
+                    <span>ถ่ายภาพที่ระลึกบันทึกคะแนน (Save Photo)</span>
+                </button>
+
+                <button id="btn-restart-victory" class="w-full bg-amber-400 hover:bg-amber-500 text-slate-900 font-black text-base py-3 px-6 rounded-2xl shadow-md border-4 border-amber-200 flex items-center justify-center gap-2 active:scale-95 transition cursor-pointer">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>เล่นใหม่อีกครั้ง</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top-Left Hand Tracking Camera Viewport PIP Box -->
+    <div id="pip-camera-box" class="fixed top-20 left-3 z-40 bg-slate-900/90 border-4 border-amber-400 rounded-2xl shadow-2xl overflow-hidden w-48 h-36 sm:w-64 sm:h-48 md:w-80 md:h-56 lg:w-96 lg:h-64 flex flex-col transition-all duration-300">
+        <div class="bg-amber-400 text-slate-900 text-xs font-black px-2.5 py-1 flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <span class="text-xs md:text-sm font-black">✋ ตรวจจับมืออยู่</span>
+            </span>
+            <div class="flex items-center gap-1">
+                <span id="hand-status-tag" class="text-[10px] md:text-xs bg-slate-800 text-amber-300 px-2 py-0.5 rounded-md font-bold">รอการตรวจจับ</span>
+                <button id="pip-toggle-size-btn" title="ย่อ/ขยายกล้อง" class="bg-slate-800 hover:bg-slate-700 text-white text-xs w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ml-1">
+                    <i id="pip-toggle-icon" class="fa-solid fa-compress text-[10px]"></i>
+                </button>
+            </div>
+        </div>
+        <div class="relative flex-1 w-full bg-black overflow-hidden">
+            <video id="bg-hand-video" class="w-full h-full object-cover -scale-x-100" playsinline webkit-playsinline muted></video>
+            <canvas id="pip-hand-canvas" class="absolute inset-0 w-full h-full object-cover -scale-x-100 pointer-events-none"></canvas>
+        </div>
+    </div>
+
+    <!-- AR Virtual Hand Cursor Pointer -->
+    <div id="hand-cursor" class="hand-pointer fixed w-14 h-14 pointer-events-none z-50 flex items-center justify-center hidden transform -translate-x-1/2 -translate-y-1/2">
+        <div class="w-12 h-12 bg-amber-400/95 border-4 border-white rounded-full flex items-center justify-center text-slate-900 text-2xl shadow-xl animate-pulse-ring">
+            <i class="fa-solid fa-hand-pointer text-slate-900"></i>
+        </div>
+        <div id="pinch-indicator" class="absolute inset-0 border-4 border-rose-500 rounded-full scale-125 opacity-0 transition-all"></div>
+    </div>
+
+    <script>
+        // Global Game State Variables
+        let currentLevel = 1;
+        let totalScore = 0;
+        let levelScores = new Array(10).fill(0);
+        let wrongAttempts = 0; // Max 2 wrong attempts limit per level
+        let audioEnabled = true;
+        let selectedItem = null;
+        let isCameraActive = false;
+        let hands = null;
+        let bgVideo = null;
+        let isPipCompact = false;
+
+        // Double-Pinch Navigation State
+        let wasPinched = false;
+        let navTapState = {
+            'btn-restart-game': { count: 0, timer: null }
+        };
+
+        // AR Hand Dragging State
+        let activeDraggedEl = null;
+
+        // AR Hand Cursor Smoothing
+        let smoothX = window.innerWidth / 2;
+        let smoothY = window.innerHeight / 2;
+        let isPinched = false;
+
+        // Trackers
+        let poppedCount = 0;
+        let poppedPrimarySet = new Set();
+        let correctDroppedCount = 0;
+
+        // Background Music (BGM) Synthesizer State
+        let bgmInterval = null;
+        let bgmStep = 0;
+        const bgmNotes = [
+            261.63, 329.63, 392.00, 523.25, 440.00, 392.00, 329.63, 293.66,
+            261.63, 329.63, 392.00, 440.00, 392.00, 329.63, 293.66, 261.63
+        ];
+
+        // Audio Context Synthesizer
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function startBGM() {
+            if (!audioEnabled || bgmInterval) return;
+            initAudio();
+            if (!audioCtx) return;
+
+            bgmStep = 0;
+            bgmInterval = setInterval(() => {
+                if (!audioEnabled || !audioCtx) {
+                    stopBGM();
+                    return;
+                }
+                try {
+                    const freq = bgmNotes[bgmStep % bgmNotes.length];
+                    bgmStep++;
+
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+                    gain.gain.setValueAtTime(0.035, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.22);
+                } catch (e) {
+                    console.warn("BGM playback error:", e);
+                }
+            }, 280);
+        }
+
+        function stopBGM() {
+            if (bgmInterval) {
+                clearInterval(bgmInterval);
+                bgmInterval = null;
+            }
+        }
+
+        function playSound(type) {
+            if (!audioEnabled) return;
+            try {
+                initAudio();
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(450, now);
+                    osc.frequency.exponentialRampToValueAtTime(850, now + 0.08);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'correct') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.1);
+                    osc.frequency.setValueAtTime(783.99, now + 0.2);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'wrong') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.setValueAtTime(160, now + 0.12);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'next_level') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+                    osc.start(now);
+                    osc.stop(now + 0.18);
+                } else if (type === 'win') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.15);
+                    osc.frequency.setValueAtTime(783.99, now + 0.3);
+                    osc.frequency.setValueAtTime(1046.50, now + 0.45);
+                    gain.gain.setValueAtTime(0.35, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                    osc.start(now);
+                    osc.stop(now + 0.6);
+                }
+            } catch (e) {
+                console.warn("Audio Context sound error:", e);
+            }
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const icon = document.getElementById('audio-icon');
+            if (icon) {
+                icon.className = audioEnabled ? "fa-solid fa-volume-high text-base md:text-lg" : "fa-solid fa-volume-xmark text-base md:text-lg text-rose-500";
+            }
+            if (audioEnabled) {
+                startBGM();
+            } else {
+                stopBGM();
+            }
+            showToast(audioEnabled ? "🔊 เปิดเสียงและดนตรีแล้ว" : "🔇 ปิดเสียงดนตรีแล้ว", true);
+        }
+
+        function hideElement(el) {
+            if (el) {
+                el.classList.add('hidden');
+                el.style.display = 'none';
+            }
+        }
+
+        function showElement(el, displayType = 'block') {
+            if (el) {
+                el.classList.remove('hidden');
+                el.style.display = displayType;
+            }
+        }
+
+        function updateScoreUI() {
+            totalScore = levelScores.reduce((a, b) => a + b, 0);
+            const scoreEl = document.getElementById('ui-total-score');
+            const levelEl = document.getElementById('ui-current-level');
+            if (scoreEl) scoreEl.innerText = totalScore;
+            if (levelEl) levelEl.innerText = currentLevel;
+        }
+
+        function updateAttemptsBadgeUI() {
+            const badge = document.getElementById('attempts-badge');
+            if (badge) {
+                const remaining = Math.max(0, 2 - wrongAttempts);
+                badge.innerText = `❌ ตอบผิดได้อีก ${remaining} ครั้ง`;
+            }
+        }
+
+        function showToast(text, isSuccess = true) {
+            const toast = document.getElementById('score-toast');
+            const bg = document.getElementById('score-toast-bg');
+            const icon = document.getElementById('score-toast-icon');
+            const txt = document.getElementById('score-toast-text');
+
+            if (!toast || !txt) return;
+
+            txt.innerText = text;
+            if (isSuccess) {
+                bg.className = "bg-emerald-500 text-white font-black text-xl md:text-3xl px-8 py-3.5 rounded-full shadow-2xl flex items-center gap-3 border-4 border-white";
+                icon.className = "fa-solid fa-circle-check text-2xl";
+            } else {
+                bg.className = "bg-rose-500 text-white font-black text-xl md:text-3xl px-8 py-3.5 rounded-full shadow-2xl flex items-center gap-3 border-4 border-white";
+                icon.className = "fa-solid fa-triangle-exclamation text-2xl";
+            }
+
+            toast.classList.remove('opacity-0', 'scale-75');
+            toast.classList.add('opacity-100', 'scale-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'scale-100');
+                toast.classList.add('opacity-0', 'scale-75');
+            }, 1800);
+        }
+
+        // High-Quality Image Assets with Direct PostIMG URLs
+        const SVG_ASSETS = {
+            red_strawberry: `<img src="https://i.postimg.cc/5yzdjgcm/phaphth-ayhn-acx-2569-09-22-wela-09-01-48.png" alt="สตรอว์เบอร์รี" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`,
+            red_apple: `<img src="https://i.postimg.cc/9095zb3D/phaphth-ayhn-acx-2569-09-22-wela-09-00-46.png" alt="แอปเปิ้ล" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`,
+            yellow_banana: `<img src="https://i.postimg.cc/fydnkC4S/phaphth-ayhn-acx-2569-09-22-wela-09-01-19.png" alt="กล้วยหอม" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`,
+            yellow_mango: `<img src="https://i.postimg.cc/WzZLt8Rh/phaphth-ayhn-acx-2569-09-22-wela-09-00-31.png" alt="มะม่วง" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`,
+            orange: `<img src="https://i.postimg.cc/ZnNt0HkB/phaphth-ayhn-acx-2569-09-22-wela-09-01-00.png" alt="ส้ม" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`,
+            blue_blueberry: `<img src="https://i.postimg.cc/kGS3Dsrt/phaphth-ayhn-acx-2569-09-22-wela-09-01-08.png" alt="บลูเบอร์รี" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`,
+            blue_whale: `<img src="https://i.postimg.cc/MHB2X5kb/phaphth-ayhn-acx-2569-09-22-wela-09-01-35.png" alt="วาฬ" class="w-full h-full object-contain filter drop-shadow-xl rounded-2xl pointer-events-none" />`
+        };
+
+        function getRealisticBalloonSVG(colorKey, labelText) {
+            const colorMap = {
+                'red': { fill: 'url(#grad-red)', stroke: '#b91c1c' },
+                'yellow': { fill: 'url(#grad-yellow)', stroke: '#a16207' },
+                'blue': { fill: 'url(#grad-blue)', stroke: '#1d4ed8' },
+                'green': { fill: 'url(#grad-green)', stroke: '#15803d' },
+                'purple': { fill: 'url(#grad-purple)', stroke: '#6b21a8' },
+                'orange': { fill: 'url(#grad-orange)', stroke: '#c2410c' }
+            };
+            const c = colorMap[colorKey] || colorMap['red'];
+            return `
+                <svg viewBox="0 0 100 130" class="w-full h-full filter drop-shadow-lg pointer-events-none">
+                    <defs>
+                        <radialGradient id="grad-red" cx="35%" cy="30%" r="65%">
+                            <stop offset="0%" stop-color="#fca5a5" />
+                            <stop offset="40%" stop-color="#ef4444" />
+                            <stop offset="100%" stop-color="#991b1b" />
+                        </radialGradient>
+                        <radialGradient id="grad-yellow" cx="35%" cy="30%" r="65%">
+                            <stop offset="0%" stop-color="#fef08a" />
+                            <stop offset="40%" stop-color="#eab308" />
+                            <stop offset="100%" stop-color="#854d0e" />
+                        </radialGradient>
+                        <radialGradient id="grad-blue" cx="35%" cy="30%" r="65%">
+                            <stop offset="0%" stop-color="#93c5fd" />
+                            <stop offset="40%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#1e3a8a" />
+                        </radialGradient>
+                        <radialGradient id="grad-green" cx="35%" cy="30%" r="65%">
+                            <stop offset="0%" stop-color="#86efac" />
+                            <stop offset="40%" stop-color="#22c55e" />
+                            <stop offset="100%" stop-color="#14532d" />
+                        </radialGradient>
+                        <radialGradient id="grad-purple" cx="35%" cy="30%" r="65%">
+                            <stop offset="0%" stop-color="#d8b4fe" />
+                            <stop offset="40%" stop-color="#a855f7" />
+                            <stop offset="100%" stop-color="#581c87" />
+                        </radialGradient>
+                        <radialGradient id="grad-orange" cx="35%" cy="30%" r="65%">
+                            <stop offset="0%" stop-color="#fdba74" />
+                            <stop offset="40%" stop-color="#f97316" />
+                            <stop offset="100%" stop-color="#7c2d12" />
+                        </radialGradient>
+                    </defs>
+                    <path d="M50 10 C20 10 10 40 10 65 C10 90 35 105 50 105 C65 105 90 90 90 65 C90 40 80 10 50 10 Z" fill="${c.fill}" stroke="${c.stroke}" stroke-width="2" />
+                    <polygon points="50,105 44,115 56,115" fill="${c.stroke}" />
+                    <path d="M50 115 Q45 122 52 128" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" />
+                    <ellipse cx="38" cy="35" rx="12" ry="7" fill="#ffffff" opacity="0.45" transform="rotate(-30 38 35)" />
+                    <text x="50" y="68" text-anchor="middle" font-size="16" font-weight="900" fill="#ffffff" style="text-shadow: 0 2px 4px rgba(0,0,0,0.6); font-family: Kanit, sans-serif;">${labelText}</text>
+                </svg>
+            `;
+        }
+
+        function loadLevel(levelNum) {
+            currentLevel = levelNum;
+            wrongAttempts = 0;
+            correctDroppedCount = 0;
+            updateScoreUI();
+            updateAttemptsBadgeUI();
+
+            const badge = document.getElementById('level-badge');
+            const title = document.getElementById('level-title');
+            const subtitle = document.getElementById('level-subtitle');
+
+            if (badge) badge.innerText = `ด่านที่ ${levelNum}`;
+
+            selectedItem = null;
+            activeDraggedEl = null;
+
+            if (levelNum === 1) {
+                if (title) title.innerText = "🔴 ตามหาแม่สีแดง!";
+                if (subtitle) subtitle.innerText = "จิ้มเลือกภาพที่เป็นสีแดงเพียงอย่างเดียว";
+                renderFindColorLevel('red', 'สีแดง', 'red_strawberry', 'yellow_banana', 'blue_blueberry');
+            } else if (levelNum === 2) {
+                if (title) title.innerText = "🟡 ตามหาแม่สีเหลือง!";
+                if (subtitle) subtitle.innerText = "จิ้มเลือกภาพที่เป็นสีเหลืองเพียงอย่างเดียว";
+                renderFindColorLevel('yellow', 'สีเหลือง', 'yellow_banana', 'red_strawberry', 'blue_blueberry');
+            } else if (levelNum === 3) {
+                if (title) title.innerText = "🔵 ตามหาแม่สีน้ำเงิน!";
+                if (subtitle) subtitle.innerText = "จิ้มเลือกภาพที่เป็นสีน้ำเงินเพียงอย่างเดียว";
+                renderFindColorLevel('blue', 'สีน้ำเงิน', 'blue_blueberry', 'red_strawberry', 'orange');
+            } else if (levelNum === 4) {
+                if (title) title.innerText = "🔴 ลากของสีแดง 2 ชิ้นลงกล่อง!";
+                if (subtitle) subtitle.innerText = "เอานิ้วจีบลากสิ่งของสีแดงทั้ง 2 ชิ้นไปวางในตู้สีแดง";
+                renderBoxDragLevel('red', 'ตู้สีแดง');
+            } else if (levelNum === 5) {
+                if (title) title.innerText = "🟡 ลากของสีเหลือง 2 ชิ้นลงกล่อง!";
+                if (subtitle) subtitle.innerText = "เอานิ้วจีบลากสิ่งของสีเหลืองทั้ง 2 ชิ้นไปวางในตู้สีเหลือง";
+                renderBoxDragLevel('yellow', 'ตู้สีเหลือง');
+            } else if (levelNum === 6) {
+                if (title) title.innerText = "🔵 ลากของสีน้ำเงิน 2 ชิ้นลงกล่อง!";
+                if (subtitle) subtitle.innerText = "เอานิ้วจีบลากสิ่งของสีน้ำเงินทั้ง 2 ชิ้นไปวางในตู้สีน้ำเงิน";
+                renderBoxDragLevel('blue', 'ตู้สีน้ำเงิน');
+            } else if (levelNum === 7) {
+                if (title) title.innerText = "🎈 จิ้มลูกโป่งสีแดง!";
+                if (subtitle) subtitle.innerText = "จิ้มลูกโป่งสีแดงให้ครบ 3 ลูก";
+                renderPopColorBalloonLevel('red', 'สีแดง');
+            } else if (levelNum === 8) {
+                if (title) title.innerText = "🎈 จิ้มลูกโป่งสีเหลือง!";
+                if (subtitle) subtitle.innerText = "จิ้มลูกโป่งสีเหลืองให้ครบ 3 ลูก";
+                renderPopColorBalloonLevel('yellow', 'สีเหลือง');
+            } else if (levelNum === 9) {
+                if (title) title.innerText = "🎈 จิ้มลูกโป่งสีน้ำเงิน!";
+                if (subtitle) subtitle.innerText = "จิ้มลูกโป่งสีน้ำเงินให้ครบ 3 ลูก";
+                renderPopColorBalloonLevel('blue', 'สีน้ำเงิน');
+            } else if (levelNum === 10) {
+                if (title) title.innerText = "🏆 ปรมาจารย์แม่สี!";
+                if (subtitle) subtitle.innerText = "จิ้มเฉพาะลูกโป่งที่เป็นแม่สี (แดง, เหลือง, น้ำเงิน) ให้ครบทุกสี";
+                renderMasterPrimaryBalloonLevel();
+            }
+        }
+
+        function handleWrongAttempt(message) {
+            playSound('wrong');
+            wrongAttempts++;
+            updateAttemptsBadgeUI();
+
+            if (wrongAttempts >= 2) {
+                showToast("❌ ตอบผิดครบ 2 ครั้ง! เปลี่ยนเป็นด่านถัดไปอัตโนมัติ 🚀", false);
+                const arena = document.getElementById('play-arena');
+                if (arena) arena.style.pointerEvents = 'none';
+
+                setTimeout(() => {
+                    if (arena) arena.style.pointerEvents = 'auto';
+                    if (currentLevel < 10) {
+                        currentLevel++;
+                        playSound('next_level');
+                        loadLevel(currentLevel);
+                    } else {
+                        playSound('win');
+                        triggerConfetti();
+                        showVictoryPhotoModal();
+                    }
+                }, 1800);
+            } else {
+                showToast(`${message} (ตอบผิดครั้งที่ 1/2)`, false);
+            }
+        }
+
+        function renderFindColorLevel(correctColor, colorName, correctKey, wrongKey1, wrongKey2) {
+            const arena = document.getElementById('play-arena');
+            const items = [
+                { key: correctKey, color: correctColor, isCorrect: true },
+                { key: wrongKey1, color: 'other1', isCorrect: false },
+                { key: wrongKey2, color: 'other2', isCorrect: false }
+            ].sort(() => Math.random() - 0.5);
+
+            const itemNames = {
+                'red_strawberry': 'สตรอว์เบอร์รี',
+                'yellow_banana': 'กล้วยหอม',
+                'orange': 'ส้ม',
+                'blue_blueberry': 'บลูเบอร์รี'
+            };
+
+            const borderColors = [
+                'border-amber-400 border-b-amber-600', 
+                'border-sky-400 border-b-sky-600', 
+                'border-rose-400 border-b-rose-600'
+            ];
+
+            let html = `<div class="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-2xl justify-items-center">`;
+            items.forEach((item, idx) => {
+                const itemName = itemNames[item.key] || '';
+                html += `
+                    <div data-clickable="true" onclick="checkFindColorAnswer(${item.isCorrect}, '${colorName}', this)" 
+                         class="special-toy-card ${borderColors[idx % borderColors.length]} p-3 w-48 h-60 flex flex-col items-center justify-between cursor-pointer transition transform">
+                        <div class="absolute top-2.5 right-2.5 bg-amber-100/95 text-amber-800 text-[11px] px-2.5 py-0.5 rounded-full font-black border border-amber-300 shadow-sm z-20 flex items-center gap-1">
+                            <span>✨</span> <span>แตะเลือก</span>
+                        </div>
+                        <div class="w-28 h-28 pointer-events-none mt-2 relative z-10 flex items-center justify-center">${SVG_ASSETS[item.key]}</div>
+                        
+                        <div class="w-full bg-slate-100 border-2 border-slate-300 rounded-2xl py-1 px-2 text-center shadow-xs mt-1 relative z-10">
+                            <span class="text-[10px] font-bold text-slate-500 block leading-tight">สิ่งนี้คือ</span>
+                            <span class="text-sm font-black text-slate-800 block leading-tight">${itemName}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            arena.innerHTML = html;
+        }
+
+        function checkFindColorAnswer(isCorrect, colorName, el) {
+            if (isCorrect) {
+                el.classList.add('card-correct');
+                completeLevel();
+            } else {
+                el.classList.add('card-wrong');
+                setTimeout(() => el.classList.remove('card-wrong'), 600);
+                handleWrongAttempt(`นั่นไม่ใช่${colorName} ลองใหม่นะ!`);
+            }
+        }
+
+        function renderBoxDragLevel(targetColor, boxName) {
+            correctDroppedCount = 0;
+            const arena = document.getElementById('play-arena');
+
+            let itemPool = [];
+            if (targetColor === 'red') {
+                itemPool = [
+                    { key: 'red_strawberry', color: 'red', label: 'สตรอว์เบอร์รี' },
+                    { key: 'red_apple', color: 'red', label: 'แอปเปิ้ล' },
+                    { key: 'yellow_banana', color: 'yellow', label: 'กล้วยหอม' },
+                    { key: 'yellow_mango', color: 'yellow', label: 'มะม่วง' },
+                    { key: 'blue_blueberry', color: 'blue', label: 'บลูเบอร์รี' },
+                    { key: 'blue_whale', color: 'blue', label: 'วาฬ' }
+                ];
+            } else if (targetColor === 'yellow') {
+                itemPool = [
+                    { key: 'yellow_banana', color: 'yellow', label: 'กล้วยหอม' },
+                    { key: 'yellow_mango', color: 'yellow', label: 'มะม่วง' },
+                    { key: 'red_strawberry', color: 'red', label: 'สตรอว์เบอร์รี' },
+                    { key: 'red_apple', color: 'red', label: 'แอปเปิ้ล' },
+                    { key: 'blue_blueberry', color: 'blue', label: 'บลูเบอร์รี' },
+                    { key: 'blue_whale', color: 'blue', label: 'วาฬ' }
+                ];
+            } else { // blue
+                itemPool = [
+                    { key: 'blue_blueberry', color: 'blue', label: 'บลูเบอร์รี' },
+                    { key: 'blue_whale', color: 'blue', label: 'วาฬ' },
+                    { key: 'red_strawberry', color: 'red', label: 'สตรอว์เบอร์รี' },
+                    { key: 'red_apple', color: 'red', label: 'แอปเปิ้ล' },
+                    { key: 'yellow_banana', color: 'yellow', label: 'กล้วยหอม' },
+                    { key: 'yellow_mango', color: 'yellow', label: 'มะม่วง' }
+                ];
+            }
+
+            const items = itemPool.sort(() => Math.random() - 0.5);
+
+            const boxBg = targetColor === 'red' ? 'bg-gradient-to-b from-rose-500 to-rose-600' : (targetColor === 'yellow' ? 'bg-gradient-to-b from-amber-400 to-amber-500' : 'bg-gradient-to-b from-blue-500 to-blue-600');
+            const boxBorderColor = targetColor === 'red' ? 'border-rose-700' : (targetColor === 'yellow' ? 'border-amber-700' : 'border-blue-700');
+
+            let html = `
+                <div class="flex flex-col items-center gap-4 w-full">
+                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 md:gap-3 w-full max-w-4xl justify-items-center">
+            `;
+
+            items.forEach((item, idx) => {
+                html += `
+                    <div id="drag-item-${idx}" data-draggable="true" data-color="${item.color}" 
+                         class="drag-source-card special-toy-card border-indigo-300 border-b-indigo-500 p-1.5 w-24 h-32 md:w-32 md:h-40 flex flex-col items-center justify-between cursor-grab active:cursor-grabbing">
+                        <div class="w-16 h-16 md:w-22 md:h-22 pointer-events-none mt-1 relative z-10 flex items-center justify-center">${SVG_ASSETS[item.key]}</div>
+                        
+                        <div class="w-full bg-amber-100/90 border border-amber-300 rounded-xl px-1 py-0.5 text-center shadow-xs relative z-10">
+                            <span class="text-[9px] md:text-[10px] font-bold text-amber-800 block leading-tight">สิ่งนี้คือ</span>
+                            <span class="text-[10px] md:text-xs font-black text-slate-900 block leading-tight truncate">${item.label}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                    <div id="drop-box-target" data-clickable="true" data-color="${targetColor}"
+                         class="${boxBg} ${boxBorderColor} text-white border-8 border-b-[12px] shadow-2xl rounded-[2.5rem] p-4 md:p-6 w-56 md:w-72 h-32 md:h-40 flex flex-col items-center justify-center cursor-pointer transform transition hover:scale-105 relative overflow-hidden">
+                        <div class="absolute top-2 left-4 right-4 h-1/3 bg-gradient-to-b from-white/30 to-transparent rounded-t-2xl pointer-events-none z-10"></div>
+                        <i class="fa-solid fa-box-open text-3xl md:text-4xl mb-1 stroke-black relative z-10"></i>
+                        <span class="font-black text-lg md:text-2xl drop-shadow-md relative z-10">${boxName}</span>
+                        <span class="text-[10px] md:text-xs font-bold opacity-90 bg-black/20 px-3 py-0.5 rounded-full mt-1 relative z-10">🖐️ ลากของ 2 ชิ้นมาวางที่นี่</span>
+                    </div>
+                </div>
+            `;
+            arena.innerHTML = html;
+
+            initTouchDragListeners(targetColor);
+        }
+
+        function initTouchDragListeners(targetColor) {
+            const dragCards = document.querySelectorAll('.drag-source-card');
+            const dropBox = document.getElementById('drop-box-target');
+
+            dragCards.forEach(card => {
+                let isDragging = false;
+                let startX, startY, initialX, initialY;
+
+                const resetCardPos = () => {
+                    card.style.position = 'static';
+                    card.style.zIndex = 'auto';
+                    card.style.left = '';
+                    card.style.top = '';
+                };
+
+                const onPointerDown = (e) => {
+                    isDragging = true;
+                    card.style.zIndex = '9000';
+                    card.style.position = 'fixed';
+                    
+                    const rect = card.getBoundingClientRect();
+                    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+
+                    startX = clientX;
+                    startY = clientY;
+                    initialX = rect.left;
+                    initialY = rect.top;
+
+                    card.style.left = `${initialX}px`;
+                    card.style.top = `${initialY}px`;
+                    card.classList.add('dragging-active');
+
+                    window.addEventListener('pointermove', onPointerMove);
+                    window.addEventListener('pointerup', onPointerUp);
+                    window.addEventListener('touchmove', onPointerMove, { passive: false });
+                    window.addEventListener('touchend', onPointerUp);
+                };
+
+                const onPointerMove = (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+
+                    const deltaX = clientX - startX;
+                    const deltaY = clientY - startY;
+
+                    card.style.left = `${initialX + deltaX}px`;
+                    card.style.top = `${initialY + deltaY}px`;
+
+                    if (dropBox) {
+                        const boxRect = dropBox.getBoundingClientRect();
+                        if (clientX >= boxRect.left && clientX <= boxRect.right && clientY >= boxRect.top && clientY <= boxRect.bottom) {
+                            dropBox.classList.add('drop-target-hover');
+                        } else {
+                            dropBox.classList.remove('drop-target-hover');
+                        }
+                    }
+                };
+
+                const onPointerUp = (e) => {
+                    if (!isDragging) return;
+                    isDragging = false;
+
+                    card.classList.remove('dragging-active');
+                    if (dropBox) dropBox.classList.remove('drop-target-hover');
+
+                    window.removeEventListener('pointermove', onPointerMove);
+                    window.removeEventListener('pointerup', onPointerUp);
+                    window.removeEventListener('touchmove', onPointerMove);
+                    window.removeEventListener('touchend', onPointerUp);
+
+                    if (dropBox) {
+                        const cardRect = card.getBoundingClientRect();
+                        const boxRect = dropBox.getBoundingClientRect();
+
+                        const centerX = cardRect.left + cardRect.width / 2;
+                        const centerY = cardRect.top + cardRect.height / 2;
+
+                        if (centerX >= boxRect.left && centerX <= boxRect.right && centerY >= boxRect.top && centerY <= boxRect.bottom) {
+                            const itemColor = card.dataset.color;
+                            if (itemColor === targetColor) {
+                                playSound('correct');
+                                card.style.visibility = 'hidden';
+                                card.style.pointerEvents = 'none';
+                                correctDroppedCount++;
+
+                                if (correctDroppedCount >= 2) {
+                                    completeLevel();
+                                } else {
+                                    showToast("ถูกต้อง! ลากของสีเดียวกันอีก 1 ชิ้น ✨", true);
+                                }
+                            } else {
+                                resetCardPos();
+                                card.classList.add('card-wrong');
+                                setTimeout(() => card.classList.remove('card-wrong'), 600);
+                                handleWrongAttempt("สีไม่ตรงกับตู้สี!");
+                            }
+                        } else {
+                            resetCardPos();
+                        }
+                    } else {
+                        resetCardPos();
+                    }
+                };
+
+                card.addEventListener('pointerdown', onPointerDown);
+                card.addEventListener('touchstart', onPointerDown, { passive: false });
+            });
+        }
+
+        function renderPopColorBalloonLevel(targetColor, targetColorName) {
+            poppedCount = 0;
+            const arena = document.getElementById('play-arena');
+
+            const balloonPool = [
+                { color: targetColor, label: targetColorName },
+                { color: 'green', label: 'เขียว' },
+                { color: targetColor, label: targetColorName },
+                { color: 'purple', label: 'ม่วง' },
+                { color: targetColor, label: targetColorName },
+                { color: 'orange', label: 'ส้ม' }
+            ].sort(() => Math.random() - 0.5);
+
+            let html = `<div class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 w-full max-w-3xl justify-items-center">`;
+            balloonPool.forEach((b, idx) => {
+                html += `
+                    <div id="balloon-item-${idx}" data-clickable="true" onclick="popTargetBalloon('${b.color}', '${targetColor}', '${targetColorName}', this)"
+                         class="w-28 h-36 md:w-36 md:h-48 cursor-pointer transform hover:scale-110 active:scale-90 transition-all duration-200">
+                        ${getRealisticBalloonSVG(b.color, b.label)}
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            arena.innerHTML = html;
+        }
+
+        function popTargetBalloon(itemColor, targetColor, targetColorName, el) {
+            playSound('click');
+
+            if (itemColor === targetColor) {
+                playSound('correct');
+                el.classList.add('scale-0', 'opacity-0', 'pointer-events-none');
+                poppedCount++;
+
+                if (poppedCount >= 3) {
+                    completeLevel();
+                } else {
+                    showToast(`ถูกต้อง! จิ้มลูกโป่ง${targetColorName} อีก ${3 - poppedCount} ลูก`, true);
+                }
+            } else {
+                el.classList.add('animate-bounce');
+                setTimeout(() => el.classList.remove('animate-bounce'), 600);
+                handleWrongAttempt(`นั่นไม่ใช่${targetColorName}!`);
+            }
+        }
+
+        function renderMasterPrimaryBalloonLevel() {
+            poppedPrimarySet.clear();
+            const arena = document.getElementById('play-arena');
+
+            const balloonPool = [
+                { color: 'red', label: 'แดง', isPrimary: true },
+                { color: 'green', label: 'เขียว', isPrimary: false },
+                { color: 'yellow', label: 'เหลือง', isPrimary: true },
+                { color: 'purple', label: 'ม่วง', isPrimary: false },
+                { color: 'blue', label: 'น้ำเงิน', isPrimary: true },
+                { color: 'orange', label: 'ส้ม', isPrimary: false }
+            ].sort(() => Math.random() - 0.5);
+
+            let html = `<div class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 w-full max-w-3xl justify-items-center">`;
+            balloonPool.forEach((b, idx) => {
+                html += `
+                    <div id="master-balloon-${idx}" data-clickable="true" onclick="popMasterPrimaryBalloon('${b.color}', ${b.isPrimary}, this)"
+                         class="w-28 h-36 md:w-36 md:h-48 cursor-pointer transform hover:scale-110 active:scale-90 transition-all duration-200">
+                        ${getRealisticBalloonSVG(b.color, b.label)}
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            arena.innerHTML = html;
+        }
+
+        function popMasterPrimaryBalloon(colorKey, isPrimary, el) {
+            playSound('click');
+
+            if (isPrimary) {
+                playSound('correct');
+                el.classList.add('scale-0', 'opacity-0', 'pointer-events-none');
+                poppedPrimarySet.add(colorKey);
+
+                if (poppedPrimarySet.size >= 3) {
+                    completeLevel();
+                } else {
+                    showToast(`ถูกต้อง! เก็บแม่สีได้ ${poppedPrimarySet.size}/3 สีแล้ว`, true);
+                }
+            } else {
+                el.classList.add('animate-bounce');
+                setTimeout(() => el.classList.remove('animate-bounce'), 600);
+                handleWrongAttempt("นั่นไม่ใช่แม่สีนะ!");
+            }
+        }
+
+        function completeLevel() {
+            if (levelScores[currentLevel - 1] === 0) {
+                levelScores[currentLevel - 1] = 10;
+                updateScoreUI();
+                playSound('correct');
+                triggerConfetti();
+                showToast("+10 คะแนน!", true);
+            } else {
+                playSound('correct');
+                showToast("เก่งมากเด็กๆ!", true);
+            }
+
+            setTimeout(() => {
+                if (currentLevel < 10) {
+                    currentLevel++;
+                    playSound('next_level');
+                    loadLevel(currentLevel);
+                } else {
+                    playSound('win');
+                    triggerConfetti();
+                    showVictoryPhotoModal();
+                }
+            }, 1600);
+        }
+
+        function handleNavBtnTap(btnId, actionFn) {
+            playSound('click');
+            const state = navTapState[btnId];
+            if (!state) return;
+
+            state.count++;
+            updateNavBadgeUI(btnId, state.count);
+
+            if (state.timer) clearTimeout(state.timer);
+
+            if (state.count >= 2) {
+                state.count = 0;
+                updateNavBadgeUI(btnId, 0);
+                actionFn();
+            } else {
+                showToast("✌️ แตะ/จีบนิ้วอีก 1 ครั้งเพื่อยืนยัน", true);
+                state.timer = setTimeout(() => {
+                    state.count = 0;
+                    updateNavBadgeUI(btnId, 0);
+                }, 1200);
+            }
+        }
+
+        function updateNavBadgeUI(btnId, count) {
+            const badge = document.getElementById(`badge-${btnId}`);
+            if (!badge) return;
+            if (count === 1) {
+                badge.innerText = "1/2";
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        function restartGame() {
+            levelScores.fill(0);
+            updateScoreUI();
+            loadLevel(1);
+            showToast("เริ่มเกมใหม่แล้ว!", true);
+        }
+
+        function restartGameFromVictory() {
+            hideElement(document.getElementById('victory-modal'));
+            restartGame();
+        }
+
+        function showVictoryPhotoModal() {
+            const vicModal = document.getElementById('victory-modal');
+            const scoreText = document.getElementById('victory-final-score');
+            const vicVideo = document.getElementById('victory-video');
+
+            if (scoreText) scoreText.innerText = totalScore;
+            showElement(vicModal, 'flex');
+
+            if (isCameraActive && bgVideo && bgVideo.srcObject) {
+                vicVideo.srcObject = bgVideo.srcObject;
+                vicVideo.play().catch(e => console.warn(e));
+            } else {
+                initBackgroundCamera().then(() => {
+                    if (bgVideo && bgVideo.srcObject) {
+                        vicVideo.srcObject = bgVideo.srcObject;
+                        vicVideo.play().catch(e => console.warn(e));
+                    }
+                });
+            }
+        }
+
+        function startGame() {
+            initAudio();
+            stopBGM();
+            startBGM();
+            hideElement(document.getElementById('welcome-modal'));
+            loadLevel(1);
+            showToast("🎮 เริ่มเกมแล้ว! สนุกกับการเรียนรู้เรื่องแม่สีนะ", true);
+        }
+
+        function startWithCamera() {
+            initAudio();
+            stopBGM();
+            startBGM();
+            hideElement(document.getElementById('welcome-modal'));
+            initBackgroundCamera();
+            loadLevel(1);
+            showToast("🎥 เริ่มเปิดกล้องจับเคลื่อนไหวมือแล้ว!", true);
+        }
+
+        async function initBackgroundCamera() {
+            bgVideo = document.getElementById('bg-hand-video');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+
+                if (bgVideo) {
+                    bgVideo.srcObject = stream;
+                    bgVideo.play();
+                }
+                isCameraActive = true;
+                initMediaPipeHands();
+            } catch (err) {
+                console.warn("Background camera init note:", err);
+                showElement(document.getElementById('cam-modal'), 'flex');
+            }
+        }
+
+        function initMediaPipeHands() {
+            let retries = 0;
+            const maxRetries = 25;
+
+            function setupHands() {
+                if (!window.Hands) {
+                    if (retries < maxRetries) {
+                        retries++;
+                        setTimeout(setupHands, 300);
+                    } else {
+                        console.warn("MediaPipe Hands script not loaded yet.");
+                    }
+                    return;
+                }
+
+                try {
+                    hands = new Hands({
+                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                    });
+
+                    hands.setOptions({
+                        maxNumHands: 1,
+                        modelComplexity: 1,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+
+                    hands.onResults(onHandResults);
+
+                    if (window.Camera && bgVideo) {
+                        const cameraUtils = new Camera(bgVideo, {
+                            onFrame: async () => {
+                                if (bgVideo && bgVideo.readyState >= 2 && hands && isCameraActive) {
+                                    await hands.send({ image: bgVideo });
+                                }
+                            },
+                            width: 640,
+                            height: 480
+                        });
+                        cameraUtils.start();
+                    }
+                } catch (e) {
+                    console.warn("MediaPipe initialization note:", e);
+                }
+            }
+
+            setupHands();
+        }
+
+        function onHandResults(results) {
+            const statusTag = document.getElementById('hand-status-tag');
+            const pipCanvas = document.getElementById('pip-hand-canvas');
+
+            if (pipCanvas) {
+                const ctx = pipCanvas.getContext('2d');
+                pipCanvas.width = pipCanvas.clientWidth || 320;
+                pipCanvas.height = pipCanvas.clientHeight || 224;
+                ctx.clearRect(0, 0, pipCanvas.width, pipCanvas.height);
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    if (statusTag) statusTag.innerText = "พบมือ 👋";
+                    const landmarks = results.multiHandLandmarks[0];
+
+                    ctx.fillStyle = '#FACC15';
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 3;
+
+                    landmarks.forEach(pt => {
+                        ctx.beginPath();
+                        ctx.arc(pt.x * pipCanvas.width, pt.y * pipCanvas.height, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+
+                    processHandGestures(landmarks);
+                } else {
+                    if (statusTag) statusTag.innerText = "รอการตรวจจับ";
+                    const cursor = document.getElementById('hand-cursor');
+                    if (cursor && !activeDraggedEl) {
+                        cursor.classList.add('hidden');
+                    }
+                }
+            }
+        }
+
+        function processHandGestures(landmarks) {
+            const cursor = document.getElementById('hand-cursor');
+            const pinchIndicator = document.getElementById('pinch-indicator');
+            if (!cursor) return;
+
+            const indexTip = landmarks[8];
+            const thumbTip = landmarks[4];
+
+            const targetX = (1 - indexTip.x) * window.innerWidth;
+            const targetY = indexTip.y * window.innerHeight;
+
+            smoothX += (targetX - smoothX) * 0.4;
+            smoothY += (targetY - smoothY) * 0.4;
+
+            cursor.style.left = `${smoothX}px`;
+            cursor.style.top = `${smoothY}px`;
+            cursor.classList.remove('hidden');
+
+            const dx = indexTip.x - thumbTip.x;
+            const dy = indexTip.y - thumbTip.y;
+            const pinchDist = Math.sqrt(dx * dx + dy * dy);
+
+            const PINCH_THRESHOLD = 0.08;
+            const UNPINCH_THRESHOLD = 0.12;
+
+            if (pinchDist < PINCH_THRESHOLD && !isPinched) {
+                isPinched = true;
+                cursor.classList.add('cursor-pinch');
+                if (pinchIndicator) pinchIndicator.style.opacity = '1';
+
+                handleVirtualTouchStart(smoothX, smoothY);
+            } else if (pinchDist > UNPINCH_THRESHOLD && isPinched) {
+                isPinched = false;
+                cursor.classList.remove('cursor-pinch');
+                if (pinchIndicator) pinchIndicator.style.opacity = '0';
+
+                handleVirtualTouchEnd(smoothX, smoothY);
+            }
+
+            if (isPinched && activeDraggedEl) {
+                activeDraggedEl.style.left = `${smoothX}px`;
+                activeDraggedEl.style.top = `${smoothY}px`;
+
+                const dropBox = document.getElementById('drop-box-target');
+                if (dropBox) {
+                    const boxRect = dropBox.getBoundingClientRect();
+                    if (smoothX >= boxRect.left && smoothX <= boxRect.right && smoothY >= boxRect.top && smoothY <= boxRect.bottom) {
+                        dropBox.classList.add('drop-target-hover');
+                    } else {
+                        dropBox.classList.remove('drop-target-hover');
+                    }
+                }
+            }
+        }
+
+        function handleVirtualTouchStart(x, y) {
+            const el = document.elementFromPoint(x, y);
+            if (!el) return;
+
+            const dragTarget = el.closest('[data-draggable="true"]');
+            if (dragTarget) {
+                activeDraggedEl = dragTarget;
+                activeDraggedEl.style.zIndex = '9000';
+                activeDraggedEl.style.position = 'fixed';
+                activeDraggedEl.style.left = `${x}px`;
+                activeDraggedEl.style.top = `${x}px`;
+                activeDraggedEl.classList.add('dragging-active');
+                return;
+            }
+
+            const clickTarget = el.closest('[data-clickable="true"], button');
+            if (clickTarget) {
+                clickTarget.click();
+            }
+        }
+
+        function handleVirtualTouchEnd(x, y) {
+            if (activeDraggedEl) {
+                const dropBox = document.getElementById('drop-box-target');
+                activeDraggedEl.classList.remove('dragging-active');
+
+                const resetDraggedElPos = () => {
+                    activeDraggedEl.style.position = 'static';
+                    activeDraggedEl.style.zIndex = 'auto';
+                    activeDraggedEl.style.left = '';
+                    activeDraggedEl.style.top = '';
+                };
+
+                if (dropBox) {
+                    dropBox.classList.remove('drop-target-hover');
+                    const boxRect = dropBox.getBoundingClientRect();
+
+                    if (x >= boxRect.left && x <= boxRect.right && y >= boxRect.top && y <= boxRect.bottom) {
+                        const itemColor = activeDraggedEl.dataset.color;
+                        const targetColor = dropBox.dataset.color;
+
+                        if (itemColor === targetColor) {
+                            playSound('correct');
+                            activeDraggedEl.style.visibility = 'hidden';
+                            activeDraggedEl.style.pointerEvents = 'none';
+                            correctDroppedCount++;
+
+                            if (correctDroppedCount >= 2) {
+                                completeLevel();
+                            } else {
+                                showToast("ถูกต้อง! ลากของสีเดียวกันอีก 1 ชิ้น ✨", true);
+                            }
+                        } else {
+                            resetDraggedElPos();
+                            activeDraggedEl.classList.add('card-wrong');
+                            const targetEl = activeDraggedEl;
+                            setTimeout(() => targetEl.classList.remove('card-wrong'), 600);
+                            handleWrongAttempt("สีไม่ตรงกับตู้สี!");
+                        }
+                    } else {
+                        resetDraggedElPos();
+                    }
+                } else {
+                    resetDraggedElPos();
+                }
+
+                activeDraggedEl = null;
+            }
+        }
+
+        function togglePipSize() {
+            playSound('click');
+            const pipBox = document.getElementById('pip-camera-box');
+            const toggleIcon = document.getElementById('pip-toggle-icon');
+            if (!pipBox || !toggleIcon) return;
+
+            isPipCompact = !isPipCompact;
+            if (isPipCompact) {
+                pipBox.className = "fixed top-20 left-3 z-40 bg-slate-900/90 border-4 border-amber-400 rounded-2xl shadow-2xl overflow-hidden w-36 h-28 md:w-44 md:h-32 flex flex-col transition-all duration-300";
+                toggleIcon.className = "fa-solid fa-expand text-[10px]";
+            } else {
+                pipBox.className = "fixed top-20 left-3 z-40 bg-slate-900/90 border-4 border-amber-400 rounded-2xl shadow-2xl overflow-hidden w-48 h-36 sm:w-64 sm:h-48 md:w-80 md:h-56 lg:w-96 lg:h-64 flex flex-col transition-all duration-300";
+                toggleIcon.className = "fa-solid fa-compress text-[10px]";
+            }
+        }
+
+        function retryCamera() {
+            hideElement(document.getElementById('cam-modal'));
+            initBackgroundCamera();
+        }
+
+        function closeCamModal() {
+            hideElement(document.getElementById('cam-modal'));
+            showToast("เปลี่ยนเป็นโหมดเมาส์ / สัมผัสแล้ว", true);
+        }
+
+        async function captureScorePhoto() {
+            playSound('click');
+            showToast("📸 กำลังสร้างภาพเกียรติบัตร...", true);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 1200;
+            canvas.height = 900;
+            const ctx = canvas.getContext('2d');
+
+            const vicVideo = document.getElementById('victory-video');
+
+            // Background gradient
+            const grad = ctx.createLinearGradient(0, 0, 1200, 900);
+            grad.addColorStop(0, '#FEF3C7');
+            grad.addColorStop(0.5, '#ECFDF5');
+            grad.addColorStop(1, '#E0F2FE');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 1200, 900);
+
+            // Confetti dots background
+            const colors = ['#EF4444', '#FACC15', '#3B82F6', '#10B981', '#EC4899', '#8B5CF6'];
+            for (let i = 0; i < 40; i++) {
+                const cx = (i * 137) % 1200;
+                const cy = (i * 211) % 900;
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.beginPath();
+                ctx.arc(cx, cy, (i % 5) + 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Outer Borders
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = 18;
+            ctx.strokeRect(20, 20, 1160, 860);
+
+            ctx.strokeStyle = '#10B981';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(36, 36, 1128, 828);
+
+            // Top Title Box
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(150, 40, 900, 110, 28);
+            else ctx.rect(150, 40, 900, 110);
+            ctx.fill();
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = 8;
+            ctx.stroke();
+
+            // Top Title Text (Fixed font syntax & enlarged size)
+            ctx.fillStyle = '#1E293B';
+            ctx.font = '900 52px Kanit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🏆 ประกาศนียบัตร ปรมาจารย์แม่สี 🎨', 600, 95);
+
+            // Player Photo Frame
+            const photoW = 540;
+            const photoH = 380;
+            const photoX = (1200 - photoW) / 2;
+            const photoY = 175;
+
+            ctx.save();
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(photoX, photoY, photoW, photoH, 28);
+            else ctx.rect(photoX, photoY, photoW, photoH);
+            ctx.clip();
+
+            if (vicVideo && vicVideo.readyState >= 2) {
+                ctx.translate(photoX + photoW, photoY);
+                ctx.scale(-1, 1);
+                ctx.drawImage(vicVideo, 0, 0, photoW, photoH);
+            } else {
+                ctx.fillStyle = '#DBEAFE';
+                ctx.fillRect(photoX, photoY, photoW, photoH);
+                ctx.fillStyle = '#1E40AF';
+                ctx.font = '900 36px Kanit, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🎨 ผู้พิชิตดินแดนแม่สี', 600, 365);
+            }
+            ctx.restore();
+
+            // Photo Border
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(photoX, photoY, photoW, photoH, 28);
+            else ctx.rect(photoX, photoY, photoW, photoH);
+            ctx.strokeStyle = '#10B981';
+            ctx.lineWidth = 12;
+            ctx.stroke();
+
+            // Decorative Fruit Images on Left and Right Sides
+            const fruitUrls = {
+                strawberry: 'https://i.postimg.cc/5yzdjgcm/phaphth-ayhn-acx-2569-09-22-wela-09-01-48.png',
+                apple: 'https://i.postimg.cc/9095zb3D/phaphth-ayhn-acx-2569-09-22-wela-09-00-46.png',
+                banana: 'https://i.postimg.cc/fydnkC4S/phaphth-ayhn-acx-2569-09-22-wela-09-01-19.png',
+                mango: 'https://i.postimg.cc/WzZLt8Rh/phaphth-ayhn-acx-2569-09-22-wela-09-00-31.png',
+                blueberry: 'https://i.postimg.cc/kGS3Dsrt/phaphth-ayhn-acx-2569-09-22-wela-09-01-08.png',
+                whale: 'https://i.postimg.cc/MHB2X5kb/phaphth-ayhn-acx-2569-09-22-wela-09-01-35.png'
+            };
+
+            const loadImg = (url) => new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                img.src = url;
+            });
+
+            const [imgStrawberry, imgApple, imgBanana, imgMango, imgBlueberry, imgWhale] = await Promise.all([
+                loadImg(fruitUrls.strawberry),
+                loadImg(fruitUrls.apple),
+                loadImg(fruitUrls.banana),
+                loadImg(fruitUrls.mango),
+                loadImg(fruitUrls.blueberry),
+                loadImg(fruitUrls.whale)
+            ]);
+
+            // Draw Decorative Badge Background Circles & Fruit Images
+            const drawFruitBadge = (img, x, y, size, bgHex) => {
+                ctx.fillStyle = bgHex;
+                ctx.beginPath();
+                ctx.arc(x + size / 2, y + size / 2, size / 2 + 10, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 6;
+                ctx.stroke();
+
+                if (img) ctx.drawImage(img, x, y, size, size);
+            };
+
+            // Left Side Fruits (Red/Yellow theme)
+            drawFruitBadge(imgStrawberry, 75, 180, 130, '#FEE2E2');
+            drawFruitBadge(imgApple, 80, 360, 125, '#FEF3C7');
+            drawFruitBadge(imgMango, 85, 540, 125, '#FEF9C3');
+
+            // Right Side Fruits (Blue/Yellow theme)
+            drawFruitBadge(imgBanana, 985, 180, 130, '#FEF08A');
+            drawFruitBadge(imgBlueberry, 980, 360, 125, '#DBEAFE');
+            drawFruitBadge(imgWhale, 975, 540, 130, '#E0F2FE');
+
+            // Score Pill Badge
+            const scorePillX = 220;
+            const scorePillY = 580;
+            const scorePillW = 760;
+            const scorePillH = 100;
+
+            ctx.fillStyle = '#10B981';
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(scorePillX, scorePillY, scorePillW, scorePillH, 32);
+            else ctx.rect(scorePillX, scorePillY, scorePillW, scorePillH);
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            // Score Text (Bold, Huge & Centered)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '900 48px Kanit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`🌟 คะแนนรวมทั้งหมด: ${totalScore} / 100 คะแนน 🌟`, 600, 630);
+
+            // Descriptive Subtitle Text (Huge & Clear)
+            ctx.fillStyle = '#1E293B';
+            ctx.font = '900 36px Kanit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('เก่งมาก! เรียนรู้ 3 แม่สี แดง 🔴 เหลือง 🟡 น้ำเงิน 🔵 ครบ 10 ด่าน', 600, 725);
+
+            ctx.fillStyle = '#475569';
+            ctx.font = '900 32px Kanit, sans-serif';
+            ctx.fillText('เกม AR จับเคลื่อนไหวมือ เรื่อง แม่สี (AR Motion Color Game)', 600, 785);
+
+            const link = document.createElement('a');
+            link.download = `รูปภาพชนะเลิศเกมแม่สี_${totalScore}คะแนน.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+
+            showToast("📸 บันทึกภาพถ่ายเกียรติบัตรสำเร็จแล้ว!", true);
+        }
+
+        function triggerConfetti() {
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 80,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+
+        window.onload = () => {
+            console.log("Cute Primary Colors AR Game Loaded Successfully!");
+
+            const btnStartCam = document.getElementById('btn-start-camera');
+            const btnStartTouch = document.getElementById('btn-start-touch');
+            const btnAudioToggle = document.getElementById('audio-toggle-btn');
+            const btnRestart = document.getElementById('btn-restart-game');
+            const btnRetryCam = document.getElementById('btn-retry-camera');
+            const btnCloseCamModal = document.getElementById('btn-close-cam-modal');
+            const btnCapturePhoto = document.getElementById('btn-capture-photo');
+            const btnRestartVictory = document.getElementById('btn-restart-victory');
+            const btnPipToggleSize = document.getElementById('pip-toggle-size-btn');
+
+            if (btnStartCam) btnStartCam.onclick = startWithCamera;
+            if (btnStartTouch) btnStartTouch.onclick = startGame;
+            if (btnAudioToggle) btnAudioToggle.onclick = toggleAudio;
+            if (btnRestart) btnRestart.onclick = () => handleNavBtnTap('btn-restart-game', restartGame);
+            if (btnRetryCam) btnRetryCam.onclick = retryCamera;
+            if (btnCloseCamModal) btnCloseCamModal.onclick = closeCamModal;
+            if (btnCapturePhoto) btnCapturePhoto.onclick = captureScorePhoto;
+            if (btnRestartVictory) btnRestartVictory.onclick = restartGameFromVictory;
+            if (btnPipToggleSize) btnPipToggleSize.onclick = togglePipSize;
+
+            loadLevel(1);
+        };
+    </script>
+</body>
+</html>
