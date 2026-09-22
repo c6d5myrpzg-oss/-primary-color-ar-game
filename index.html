@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>เกม AR จับเคลื่อนไหวมือ เรื่อง แม่สี</title>
+    <title>เกม AR จับเคลื่อนไหวมือ เรื่อง แม่สี - โดยครูนภาพร มณีกรรณ์</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
@@ -126,14 +126,16 @@
     <header class="w-full bg-white/95 backdrop-blur-md border-b-8 border-amber-400 shadow-lg sticky top-0 z-30 px-3 py-3 md:px-8">
         <div class="max-w-6xl mx-auto flex items-center justify-between gap-3">
             
-            <!-- Logo & Title -->
+            <!-- Logo & Title with Teacher Credit -->
             <div class="flex items-center gap-3">
                 <div class="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-tr from-rose-500 via-amber-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg text-white text-2xl md:text-3xl font-black border-4 border-white">
                     🎨
                 </div>
                 <div>
                     <h1 class="text-lg md:text-2xl font-black text-slate-800 leading-tight tracking-wide">เกม AR แม่สีการ์ตูนสุดสนุก</h1>
-                    <p class="text-xs md:text-sm text-slate-500 font-bold hidden sm:block">เรียนรู้ 3 แม่สี แดง 🔴 เหลือง 🟡 น้ำเงิน 🔵</p>
+                    <p class="text-xs md:text-sm text-slate-500 font-bold hidden sm:block">
+                        เรียนรู้ 3 แม่สี แดง 🔴 เหลือง 🟡 น้ำเงิน 🔵 | <span class="text-indigo-600 font-black">โดยครูนภาพร มณีกรรณ์</span>
+                    </p>
                 </div>
             </div>
 
@@ -211,11 +213,17 @@
     <!-- Welcome Modal -->
     <div id="welcome-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
         <div class="bg-white border-8 border-amber-400 rounded-3xl max-w-lg w-full p-6 md:p-8 text-center shadow-2xl relative overflow-hidden animate-bounce-gentle">
-            <div class="w-24 h-24 mx-auto bg-gradient-to-tr from-rose-500 via-amber-400 to-blue-500 rounded-3xl flex items-center justify-center shadow-lg text-white text-5xl mb-4 border-4 border-white">
+            <div class="w-24 h-24 mx-auto bg-gradient-to-tr from-rose-500 via-amber-400 to-blue-500 rounded-3xl flex items-center justify-center shadow-lg text-white text-5xl mb-3 border-4 border-white">
                 ✨
             </div>
             
-            <h2 class="text-2xl md:text-4xl font-black text-slate-800 mb-2">ตะลุยดินแดนแม่สีการ์ตูน!</h2>
+            <h2 class="text-2xl md:text-4xl font-black text-slate-800 mb-1">ตะลุยดินแดนแม่สีการ์ตูน!</h2>
+            
+            <!-- Teacher Credit Badge -->
+            <div class="inline-block bg-indigo-50 border-2 border-indigo-200 text-indigo-700 font-extrabold text-sm md:text-base px-4 py-1 rounded-full mb-4 shadow-xs">
+                👩‍🏫 สื่อการเรียนรู้โดย: <span class="font-black text-indigo-900">ครูนภาพร มณีกรรณ์</span>
+            </div>
+
             <p class="text-slate-600 font-bold text-base md:text-lg mb-6 leading-relaxed">
                 สนุกสนานกับภาพการ์ตูนน่ารัก <br>
                 เรียนรู้เรื่อง <span class="text-rose-500 font-black">สีแดง</span>, <span class="text-amber-500 font-black">สีเหลือง</span> และ <span class="text-blue-500 font-black">สีน้ำเงิน</span> ครบทั้ง 10 ด่าน!
@@ -266,7 +274,11 @@
             
             <div class="text-5xl md:text-6xl mb-2">🏆</div>
             <h2 id="victory-title-text" class="text-2xl md:text-4xl font-black text-slate-800 mb-1">ยินดีด้วย! คุณคือปรมาจารย์แม่สี</h2>
-            <p id="victory-desc-text" class="text-slate-600 font-bold text-sm md:text-base mb-3">ผ่านครบ 10 ด่าน ได้รับคะแนน!</p>
+            <p id="victory-desc-text" class="text-slate-600 font-bold text-sm md:text-base mb-2">ผ่านครบ 10 ด่าน ได้รับคะแนน!</p>
+            
+            <div class="text-xs md:text-sm font-extrabold text-indigo-700 mb-3">
+                👩‍🏫 สื่อการสอนโดย: ครูนภาพร มณีกรรณ์
+            </div>
 
             <div class="bg-amber-100 border-4 border-amber-400 rounded-2xl py-2 px-6 inline-block mb-4">
                 <span class="text-lg md:text-2xl font-black text-amber-900">คะแนนรวมจริง: <span id="victory-final-score" class="text-3xl md:text-4xl text-emerald-600 font-black">0</span> / 100 คะแนน 🌟</span>
@@ -1563,17 +1575,18 @@
 
             // Descriptive Subtitle Text (Huge & Clear)
             ctx.fillStyle = '#1E293B';
-            ctx.font = '900 36px Kanit, sans-serif';
+            ctx.font = '900 32px Kanit, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('เก่งมาก! เรียนรู้ 3 แม่สี แดง 🔴 เหลือง 🟡 น้ำเงิน 🔵 ครบ 10 ด่าน', 600, 725);
 
-            ctx.fillStyle = '#475569';
-            ctx.font = '900 32px Kanit, sans-serif';
-            ctx.fillText('เกม AR จับเคลื่อนไหวมือ เรื่อง แม่สี (AR Motion Color Game)', 600, 785);
+            // Teacher Credit Line on Certificate
+            ctx.fillStyle = '#4338CA';
+            ctx.font = '900 28px Kanit, sans-serif';
+            ctx.fillText('เกม AR จับเคลื่อนไหวมือ เรื่อง แม่สี | โดยครูนภาพร มณีกรรณ์', 600, 785);
 
             const link = document.createElement('a');
-            link.download = `รูปภาพชนะเลิศเกมแม่สี_${totalScore}คะแนน.png`;
+            link.download = `รูปภาพชนะเลิศเกมแม่สี_${totalScore}คะแนน_ครูนภาพร.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
 
